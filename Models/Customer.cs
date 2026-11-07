@@ -1,4 +1,4 @@
-﻿namespace ImplementingRateLimitingMiddleware.Models;
+namespace ImplementingRateLimitingMiddleware.Models;
 
 public class Customer
 {

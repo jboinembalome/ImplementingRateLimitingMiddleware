@@ -1,4 +1,4 @@
-﻿using ImplementingRateLimitingMiddleware.Models;
+using ImplementingRateLimitingMiddleware.Models;
 
 namespace ImplementingRateLimitingMiddleware.Persistence.Interfaces;
 

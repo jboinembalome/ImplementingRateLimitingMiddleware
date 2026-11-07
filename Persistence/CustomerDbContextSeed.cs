@@ -1,4 +1,4 @@
-﻿using ImplementingRateLimitingMiddleware.Models;
+using ImplementingRateLimitingMiddleware.Models;
 
 namespace ImplementingRateLimitingMiddleware.Persistence;
 
@@ -11,8 +11,8 @@ public static class CustomerDbContextSeed
 
     private static async Task SeedCustomersAsync(CustomerDbContext dbContext)
     {
-        var customers = new List<Customer>
-        {
+        List<Customer> customers =
+        [
             new Customer
             {
                 Id = Guid.Parse("31a7ffcf-d099-4637-bd58-2a87641d1aaf"),
@@ -48,9 +48,9 @@ public static class CustomerDbContextSeed
                 LastName = "Boinembalome",
                 Email = "jboinembalome@gmail.com"
             },
-        };
+        ];
 
-        await dbContext.Customers.AddRangeAsync(customers);
+        dbContext.Customers.AddRange(customers);
         await dbContext.SaveChangesAsync();
     }
 }
