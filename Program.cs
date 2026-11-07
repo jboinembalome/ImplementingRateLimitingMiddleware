@@ -10,7 +10,6 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 builder.Services.AddDbContext<CustomerDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -74,39 +73,33 @@ builder.Services.AddRateLimiter(options =>
 
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-    options.OnRejected = async (context, token) =>
+    options.OnRejected = async (context, _) =>
     {
-        string errorMessage;
+        var detail = "Too many requests. Please try again later.";
         if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
         {
-            context.HttpContext.Response.Headers.RetryAfter =
-                ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
-
-            errorMessage = "Too many requests. " +
-                           $"Please try again after {retryAfter.TotalSeconds} second(s). " +
-                           "You can read more information about rate limits at https://example.org/docs/ratelimiting.";
-
-            await context.HttpContext.Response.WriteAsync(errorMessage, token);
-            return;
+            var seconds = (int)Math.Ceiling(retryAfter.TotalSeconds);
+            context.HttpContext.Response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);
+            detail = $"Too many requests. Please try again after {seconds} second(s).";
         }
 
-        errorMessage = "Too many requests. " +
-                       "Please try again later. " +
-                       "You can read more information about rate limits at https://example.org/docs/ratelimiting.";
-        await context.HttpContext.Response.WriteAsync(errorMessage, token);
+        await TypedResults.Problem(detail: detail, statusCode: StatusCodes.Status429TooManyRequests)
+            .ExecuteAsync(context.HttpContext);
     };
 });
 
 builder.Services.AddControllers();
+builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+app.UseExceptionHandler();
+app.UseStatusCodePages();
+
 if (app.Environment.IsDevelopment())
 {
-    // Initialize and seed database
-    using (var scope = app.Services.CreateScope())
+    await using (var scope = app.Services.CreateAsyncScope())
     {
         var dbContext = scope.ServiceProvider.GetRequiredService<CustomerDbContext>();
 
@@ -122,13 +115,11 @@ app.UseHttpsRedirection();
 
 app.UseRateLimiter();
 
-app.UseAuthorization();
-
 app.MapControllers();
 
-// GET: api/minimal/customers
 app.MapGet("/api/minimal/customers", (ICustomerService customerService, CancellationToken cancellationToken) =>
         customerService.GetCustomersAsync(cancellationToken))
-    .RequireRateLimiting("per-ip");
+    .RequireRateLimiting("per-ip")
+    .ProducesProblem(StatusCodes.Status429TooManyRequests);
 
 app.Run();

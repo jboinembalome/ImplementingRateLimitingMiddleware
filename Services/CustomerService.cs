@@ -13,9 +13,9 @@ public sealed class CustomerService(ICustomerRepository customerRepository) : IC
         return customer?.ToCustomerDto();
     }
 
-    public async Task<IEnumerable<CustomerDto>> GetCustomersAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<CustomerDto>> GetCustomersAsync(CancellationToken cancellationToken = default)
     {
         var customers = await customerRepository.GetCustomersAsync(cancellationToken);
-        return customers.Select(x => x.ToCustomerDto());
+        return [.. customers.Select(x => x.ToCustomerDto())];
     }
 }
