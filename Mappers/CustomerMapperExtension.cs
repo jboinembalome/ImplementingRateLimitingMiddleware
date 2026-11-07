@@ -1,4 +1,4 @@
-﻿using ImplementingRateLimitingMiddleware.Dtos;
+using ImplementingRateLimitingMiddleware.Dtos;
 using ImplementingRateLimitingMiddleware.Models;
 
 namespace ImplementingRateLimitingMiddleware.Mappers;

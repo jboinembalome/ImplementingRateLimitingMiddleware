@@ -1,14 +1,9 @@
-﻿using ImplementingRateLimitingMiddleware.Models;
+using ImplementingRateLimitingMiddleware.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace ImplementingRateLimitingMiddleware.Persistence;
 
-public class CustomerDbContext : DbContext
+public sealed class CustomerDbContext(DbContextOptions<CustomerDbContext> options) : DbContext(options)
 {
-    public CustomerDbContext(DbContextOptions<CustomerDbContext> options)
-        : base(options)
-    {
-    }
-
-    public DbSet<Customer> Customers { get; set; }
+    public DbSet<Customer> Customers => Set<Customer>();
 }

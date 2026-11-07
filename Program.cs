@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Threading.RateLimiting;
 using ImplementingRateLimitingMiddleware.Interfaces;
 using ImplementingRateLimitingMiddleware.Persistence;
 using ImplementingRateLimitingMiddleware.Persistence.Interfaces;
@@ -5,7 +7,6 @@ using ImplementingRateLimitingMiddleware.Persistence.Repositories;
 using ImplementingRateLimitingMiddleware.Services;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,10 +21,10 @@ builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("fixed", options =>
     {
-        options.PermitLimit = 2;
-        options.Window = TimeSpan.FromSeconds(60);
+        options.PermitLimit = 10;
+        options.Window = TimeSpan.FromSeconds(10);
         options.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        options.QueueLimit = 1;
+        options.QueueLimit = 5;
     });
 
     options.AddSlidingWindowLimiter("sliding", options =>
@@ -51,14 +52,36 @@ builder.Services.AddRateLimiter(options =>
         options.QueueLimit = 5;
     });
 
+    // One fixed window per client IP address: a noisy client cannot use up everybody else's quota.
+    options.AddPolicy("per-ip", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromSeconds(10)
+            }));
+
+    // Applies to every request, on top of the named policy of the endpoint (if any).
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 100,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
     options.OnRejected = async (context, token) =>
     {
-
-        string errorMessage = string.Empty;
+        string errorMessage;
         if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
         {
+            context.HttpContext.Response.Headers.RetryAfter =
+                ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+
             errorMessage = "Too many requests. " +
                            $"Please try again after {retryAfter.TotalSeconds} second(s). " +
                            "You can read more information about rate limits at https://example.org/docs/ratelimiting.";
@@ -67,17 +90,15 @@ builder.Services.AddRateLimiter(options =>
             return;
         }
 
-        errorMessage = "Too many requests." +
-                       "Please try later again." +
+        errorMessage = "Too many requests. " +
+                       "Please try again later. " +
                        "You can read more information about rate limits at https://example.org/docs/ratelimiting.";
         await context.HttpContext.Response.WriteAsync(errorMessage, token);
     };
 });
 
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
@@ -94,16 +115,20 @@ if (app.Environment.IsDevelopment())
         await CustomerDbContextSeed.SeedDataAsync(dbContext);
     }
 
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi();
 }
 
-app.UseRateLimiter();
-
 app.UseHttpsRedirection();
+
+app.UseRateLimiter();
 
 app.UseAuthorization();
 
 app.MapControllers();
+
+// GET: api/minimal/customers
+app.MapGet("/api/minimal/customers", (ICustomerService customerService, CancellationToken cancellationToken) =>
+        customerService.GetCustomersAsync(cancellationToken))
+    .RequireRateLimiting("per-ip");
 
 app.Run();

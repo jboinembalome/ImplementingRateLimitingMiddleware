@@ -1,26 +1,14 @@
-﻿using ImplementingRateLimitingMiddleware.Models;
+using ImplementingRateLimitingMiddleware.Models;
 using ImplementingRateLimitingMiddleware.Persistence.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace ImplementingRateLimitingMiddleware.Persistence.Repositories;
 
-public class CustomerRepository: ICustomerRepository
+public sealed class CustomerRepository(CustomerDbContext dbContext) : ICustomerRepository
 {
-    private readonly CustomerDbContext _dbContext;
+    public async Task<Customer?> GetCustomerByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
+        await dbContext.Customers.FindAsync([id], cancellationToken);
 
-    public CustomerRepository(CustomerDbContext dbContext)
-    {
-        _dbContext = dbContext;
-    }
-
-    public async Task<Customer?> GetCustomerByIdAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        var keyValues = new object[] { id };
-        return await _dbContext.Customers.FindAsync(keyValues, cancellationToken);
-    }
-
-    public async Task<IReadOnlyList<Customer>> GetCustomersAsync(CancellationToken cancellationToken = default)
-    {
-        return await _dbContext.Customers.AsNoTracking().ToListAsync(cancellationToken);
-    }
+    public async Task<IReadOnlyList<Customer>> GetCustomersAsync(CancellationToken cancellationToken = default) =>
+        await dbContext.Customers.AsNoTracking().ToListAsync(cancellationToken);
 }
